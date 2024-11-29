@@ -1,0 +1,196 @@
+---
+title: 'Geog6300: Lab 6'
+output: github_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Regression
+
+```{r setup, message=FALSE, warning=FALSE}
+library(sf)
+library(tidyverse)
+library(tmap)
+library(knitr)
+library(lmtest)
+library(car)
+```
+
+**Overview:**
+This lab focuses on regression techniques. You'll be analyzing the association of various physical and climatological characteristics in Australia with observations of several animals recorded on the citizen science app iNaturalist.
+
+###Data and research questions###
+
+Let's import the dataset.
+
+```{r}
+lab6_data<-st_read("data/aus_climate_inat.gpkg")
+```
+
+The dataset for this lab is a 1 decimal degree hexagon grid that has aggregate statistics for a number of variables:
+
+* ndvi: NDVI/vegetation index values from Landsat data (via Google Earth Engine). These values range from -1 to 1, with higher values indicating more vegetation.
+* maxtemp_00/20_med: Median maximum temperature (C) in 2000 or 2020 (data from SILO/Queensland government)
+* mintemp_00/20_med: Median minimum temperature (C) in 2020 or 2020 (data from SILO/Queensland government)
+* rain_00/20_sum: Total rainfall (mm) in 2000 or 2020 (data from SILO/Queensland government)
+* pop_00/20: Total population in 2000 or 2020 (data from NASA's Gridded Population of the World)
+* water_00/20_pct: Percentage of land covered by water at some point during the year in 2000 or 2020
+* elev_med: Median elevation (meters) (data from the Shuttle Radar Topography Mission/NASA)
+
+There are also observation counts from iNaturalist for several distinctively Australian animal species: the central bearded dragon, the common emu, the red kangaroo, the agile wallaby, the laughing kookaburra, the wombat, the koala, and the platypus.
+
+Our primary research question is how the climatological/physical variables in our dataset are predictive of the NDVI value. We will build models for 2020 as well as the change from 2000 to 2020. The second is referred to as a "first difference" model and can sometimes be more useful for identifying causal mechanisms.
+
+###Part 1: Analysis of 2020 data###
+
+We will start by looking at data for 2020. 
+
+**Question 1** _Create histograms for NDVI, max temp., min temp., rain, and population, and water in 2020 as well as elevation. Based on these graphs, assess the normality of these variables._
+
+```{r}
+Aus_data_2020<-lab6_data %>%
+  select(maxtemp_20_med, mintemp_20_med, rain_20_sum, ndvi_20_med, water_20_pct, pop_20, elev_med)
+
+hist(Aus_data_2020$maxtemp_20_med)
+hist(Aus_data_2020$mintemp_20_med)
+hist(Aus_data_2020$rain_20_sum)
+hist(Aus_data_2020$ndvi_20_med)
+hist(Aus_data_2020$water_20_pct)
+hist(Aus_data_2020$pop_20)
+hist(Aus_data_2020$elev_med)
+  
+```
+
+{All the variables tested was non-parametric, or distributed unevenly. This is through that the histograms show skewness on all of the variables, with maxtemp and mintemp variables being skewed to the left while rain_20_sum, ndvi_20_med, water_20_pct, pop_20, and elev_med variables are being skewed to the right. Thsi would mean that the p-value would be less than 0.05 and would reject the null hypothesis.}
+
+**Question 2** _Use tmap to map these same variables using Jenks natural breaks as the classification method. For an extra challenge, use `tmap_arrange` to plot all maps in a single figure._
+
+```{r}
+tmap_mode("plot")
+
+tm_shape(Aus_data_2020) + 
+  tm_polygons("maxtemp_20_med", style = "jenks") 
+
+tm_shape(Aus_data_2020) +
+  tm_polygons("mintemp_20_med", style = "jenks") 
+
+tm_shape(Aus_data_2020) + 
+  tm_polygons("rain_20_sum", style = "jenks") 
+
+tm_shape(Aus_data_2020) + 
+  tm_polygons("ndvi_20_med", style = "jenks")
+
+tm_shape(Aus_data_2020) + 
+  tm_polygons("water_20_pct", style = "jenks")
+
+tm_shape(Aus_data_2020) + 
+  tm_polygons("pop_20", style = "jenks")
+
+tm_shape(Aus_data_2020) + 
+  tm_polygons("elev_med", style = "jenks")
+
+```
+
+
+**Question 3** _Based on the maps from question 2, summarise major patterns you see in the spatial distribution of these data from any of your variables of interest. How do they appear to be associated with the NDVI variable?_
+
+{In the plots, there are two major patterns that I see. One being that when NDVI and rain_20_sum, they are almost in the exact same place, which is along most of the coastlines in Australia. What this means is that the NDVI and rain_20_sum variables are positively correlated with each other. The other major pattern that when looking at water_20_pct variable, most of the points are located more inland than on the coastlines. When it's compared to the NDVI variable, the lowest values are located where the highest percentage of water is. What this means that the NDVI and water_20_pct variables are negatively correlated with each other.}
+
+**Question 4** _Create univariate models for each of the variables listed in question 1, with NDVI in 2020 as the dependent variable. Print a summary of each model. Write a summary of those results that indicates the direction, magnitude, and significance for each model coefficient._
+
+```{r}
+model1<-lm(ndvi_20_med~maxtemp_20_med, data = Aus_data_2020)
+summary(model1)
+
+model2<-lm(ndvi_20_med~mintemp_20_med, data = Aus_data_2020)
+summary(model2)
+
+model3<-lm(ndvi_20_med~rain_20_sum, data = Aus_data_2020)
+summary(model3)
+
+model4<-lm(ndvi_20_med~water_20_pct, data = Aus_data_2020)
+summary(model4)
+
+model5<-lm(ndvi_20_med~pop_20, data = Aus_data_2020)
+summary(model5)
+
+model6<-lm(ndvi_20_med~elev_med, data = Aus_data_2020)
+summary(model6)
+```
+
+{When comparing the NDVI and maxtemp_20_med variable, the direction is negative, which means that as maxtemp_20_med increases, NDVI decreases. The magnitude is as maxtemp_20_med changes by one unit, NDVI changes by -0.013. The significance is the p-value is 2e-16, which means its statistically significant. When comparing the NDVI and mintemp_20_med variable, the direction is negative, which means that as mintemp_20_med increases, NDVI decreases. The magnitude is as mintemp_20_med changes by one unit, NDVI changes by -0.012. The significance is the p-value is 2e-16, which means its statistically significant. When comparing the NDVI and rain_20_sum variable, the direction is positive, which means that as rain_20_sum increases, NDVI also increases. The magnitude is as rain_20_sum changes by one unit, NDVI changes by 9.124e-7. The significance is the p-value is 2e-16, which means its statistically significant. When comparing the NDVI and water_20_pct variable, the direction is negative, which means that as water_20_pct increases, NDVI decreases. The magnitude is as water_20_pct changes by one unit, NDVI changes by -0.1782. The significance is the p-value is 0.249, which means it is not statistically significant. When comparing the NDVI and pop_20 variable, the direction is positive, which means that as pop_20 increases, NDVI also increases. The magnitude is as pop_20 changes by one unit, NDVI changes by 1.500e-6. The significance is the p-value is 2e-16, which means its statistically significant. When comparing the NDVI and elev_med variable, the direction is positive, which means that as elev_med increases, NDVI also increases. The magnitude is as elev_med changes by one unit, NDVI changes by 1.787e-4. The significance is the p-value is 1.14e-9, which means its statistically significant.}
+ 
+**Question 5** _Create a multivariate regression model with the variables of interest, choosing EITHER max or min temperature (but not both) You may also choose to leave out any variables that were insignificant in Q4. Use the univariate models as your guide. Call the results._
+
+```{r}
+model_multi<-lm(ndvi_20_med~maxtemp_20_med+rain_20_sum+pop_20+elev_med, data = Aus_data_2020)
+summary(model_multi)
+
+```
+
+**Question 6** _Summarize the results of the multivariate model. What are the direction, magnitude, and significance of each coefficient? How did it change from the univariate models you created in Q4 (if at all)? What do the R2 and F-statistic values tell you about overall model fit?_
+
+{When comparing the NDVI and maxtemp_20_med variable, the direction is negative, which means that as maxtemp_20_med increases, NDVI decreases. The magnitude is as maxtemp_20_med changes by one unit, NDVI changes by -1.170e-2. The significance is the p-value is 2e-16, which means its statistically significant.When comparing the NDVI and rain_20_sum variable, the direction is positive, which means that as rain_20_sum increases, NDVI also increases. The magnitude is as rain_20_sum changes by one unit, NDVI changes by 8.469e-7. The significance is the p-value is 2e-16, which means its statistically significant. When comparing the NDVI and pop_20 variable, the direction is positive, which means that as pop_20 increases, NDVI also increases. The magnitude is as pop_20 changes by one unit, NDVI changes by 2.862e-7. The significance is the p-value is 0.00627, which means its statistically significant. When comparing the NDVI and elev_med variable, the direction is positive, which means that as elev_med increases, NDVI also increases. The magnitude is as elev_med changes by one unit, NDVI changes by 1.233e-4. The significance is the p-value is 1.14e-9, which means its statistically significant. When comparing the univariate and multivariate models, there wasn't much of a difference between the two models except for a change in the estimate numbers and the pop_20 variables p-value changed. The R2 value was 0.6376 and the F-statistic 315.5. What this means is that for F-statistic, a high value means that the regression model is effetcive in explaining the variation within the dependent variable while for R2, the vlaue of 0.6376 means that the independent variable is explaining most of the variations in the dependent variable but could be a bit better.}
+
+**Question 7** _Use a histogram and a map to assess the normality of residuals and any spatial autocorrelation. Summarise any notable patterns that you see._
+
+```{r}
+Aus_data_2020$residuals<-residuals(model_multi)
+
+ggplot(Aus_data_2020, aes(x = residuals)) +    
+  geom_histogram(fill = "blue", color = "black")
+
+shapiro.test(Aus_data_2020$residuals)
+
+tm_shape(Aus_data_2020) + 
+  tm_fill("residuals", style = "quantile", palette = "RdBu") + 
+  tm_borders()
+```
+
+{One noticable pattern is that when looking at the histogram, the residual data is distributed in a non-normal manner. This is through that the data is left-skewed on the histogram. Another noticable pattern is that there is some spatial autocorrelation throuhg clustering of high residual values in south central and west central Australia.}
+
+**Question 8** _Assess any issues with multicollinearity or heteroskedastity in this model using the techniques shown in class. Run the appropriate tests and explain what their results show you._
+
+```{r}
+bptest(model_multi) # Heteroskedastity
+vif(model_multi) # Multicollinearity
+```
+
+{After doing the heteroskadastity test, the BP value was 122.41 and the p-value was 2e-16. What that tells us is that model is heteroskadastic in the sense that the values are making the p-value be samller to what they actually are. After doing the multicollinearity test, the values for the 4 variables in the ultivariate regression model were between 1.0 and 1.2. This means the there is very little multicollinearity found in the model.}
+
+**Question 9** _How would you summarise the results of this model in a sentence or two? In addition, looking at the full model and your diagnostics, do you feel this is a model that provides meaningful results? Explain your answer._
+
+{I would summarise the results in that NDVI is influenced by maxtemp_20_pct, rain_20_sum, pop_20, and elev_med variables. I believe that the model provides meaningful results. This si through that while there is heteroskadastity, it doesn't overshadow the whole dataset set and still provides good results. It also amtches up based off of common sense and logic, like vegetation growth or coverage is affected by rainfall and so on. }
+
+**Disclosure of assistance:** _Besides class materials, what other sources of assistance did you use while completing this lab? These can include input from classmates, relevant material identified through web searches (e.g., Stack Overflow), or assistance from ChatGPT or other AI tools. How did these sources support your own learning in completing this lab?_
+
+{I used classmates help to make sur eI was on the right track with my code and was getting mostly the same results as they were. I also used Stack Overflow and ChatGPT to help diagnose and repair error codes. ChatGPT also helped me learn more about my error codes and helped me learn how to prevent them in the future.}
+
+**Lab reflection:** _How do you feel about the work you did on this lab? Was it easy, moderate, or hard? What were the biggest things you learned by completing it?_
+
+{I believe that this was overall my second best lab that I have completed. it was easier than others and after doing these labs for the past few months, I feel like my confidence level in coding in Rstudio is a lot better than when I started. This lab was pretty easy in the sense that I had very few error when writing my code and the it wasn't too hard to actually write the code. The biggest thing that I learned was how to conduct univariate and multivariate regression models and how to intrepret the results from each test.}
+
+
+**Challenge question**
+
+#Option 1
+Create a first difference model. To do that, subtract the values in 2000 from the values in 2020 for each variable for which that is appropriate. Then create a new model similar to the one you created in question 5, but using these new variables showing the *change in values* over time. Call the results of the model, and interpret the results in the same ways you did above. Also chart and map the residuals to assess model error. Finally, write a short section that summarises what, if anything, this model tells you. 
+
+```{r}
+
+```
+
+
+
+
+#Option 2
+The animal data included in this dataset is an example of count data, and usually we would use a Poisson or similar model for that purpose. Let's try it with regular OLS regression though. Create two regression models to assess how the counts of two different animals (say, koalas and emus) are associated with at least three of the environmental/climatological variables given above. Be sure to use the same independent variables in each model. Interpret the results of each model and then explain the importance of any differences in the model coefficients between them, focusing on direction, magnitude, and significance.
+
+```{r}
+
+```
+
